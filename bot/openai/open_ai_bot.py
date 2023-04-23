@@ -57,10 +57,11 @@ class OpenAIBot(Bot, OpenAIImage):
                 else:
                     session = self.sessions.session_query(query, session_id)
                     result = self.reply_text(session)
-                    total_tokens, completion_tokens, reply_content = (
+                    total_tokens, completion_tokens, reply_content, reset = (
                         result["total_tokens"],
                         result["completion_tokens"],
                         result["content"],
+                        result["reset"],
                     )
                     logger.debug(
                         "[OPEN_AI] new_query={}, session_id={}, reply_cont={}, completion_tokens={}".format(str(session), session_id, reply_content, completion_tokens)
@@ -71,6 +72,8 @@ class OpenAIBot(Bot, OpenAIImage):
                     else:
                         self.sessions.session_reply(reply_content, session_id, total_tokens)
                         reply = Reply(ReplyType.TEXT, reply_content)
+                    if reset:
+                        self.sessions.clear_session(session_id)
                 return reply
             elif context.type == ContextType.IMAGE_CREATE:
                 ok, retstring = self.create_img(query, 0)
@@ -92,6 +95,7 @@ class OpenAIBot(Bot, OpenAIImage):
                 "total_tokens": total_tokens,
                 "completion_tokens": completion_tokens,
                 "content": res_content,
+                "reset": False,
             }
         except Exception as e:
             need_retry = retry_count < 2
@@ -109,6 +113,7 @@ class OpenAIBot(Bot, OpenAIImage):
             elif isinstance(e, openai.error.APIConnectionError):
                 logger.warn("[OPEN_AI] APIConnectionError: {}".format(e))
                 need_retry = False
+                result["reset"] = True
                 result["content"] = "我连接不到你的网络"
             else:
                 logger.warn("[OPEN_AI] Exception: {}".format(e))
